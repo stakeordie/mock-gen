@@ -39,12 +39,12 @@ const logRequest = (req, payload, responseType) => {
 };
 
 /**
- * Main endpoint handler for /v2/generations/:id
+ * Main endpoint handler for /collections/:id/generations
  * 
- * [FLAG: 2025-05-27T17:55:00-04:00] Updated to use simplified configuration
+ * [FLAG: 2025-05-27T18:10:00-04:00] Updated to match the EmProps API endpoint structure
  * Handles different collection IDs and returns appropriate responses based on payload and configuration
  */
-app.post('/v2/generations/:id', (req, res) => {
+app.post('/collections/:id/generations', (req, res) => {
   const { id } = req.params;
   const payload = req.body;
   
@@ -65,9 +65,17 @@ app.post('/v2/generations/:id', (req, res) => {
     return;
   }
   
-  // Use payload directly since we're not mapping parameters anymore
-  const params = payload;
-  console.log(`Parameters:`, params);
+  // [FLAG: 2025-05-27T18:15:00-04:00] Extract variables from the payload
+  let params;
+  if (payload.variables) {
+    // If payload has a variables object, use that
+    params = payload.variables;
+    console.log(`Variables from payload:`, params);
+  } else {
+    // For backward compatibility, use the payload directly
+    params = payload;
+    console.log(`Parameters from payload:`, params);
+  }
   
   // Determine the appropriate response
   const responseConfig = config.determineResponse(collection, params);
@@ -154,6 +162,6 @@ app.listen(PORT, () => {
   
   // List available collections from configuration
   config.collections.forEach(collection => {
-    console.log(`- POST /v2/generations/${collection.id}`);
+    console.log(`- POST /collections/${collection.id}/generations`);
   });
 });
