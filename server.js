@@ -1,19 +1,33 @@
 // server.js
 // Generated: 2025-05-27T09:07:42-04:00
+// [FLAG: 2025-05-27T17:50:00-04:00] Updated to use configuration file
 
 const express = require('express');
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const path = require('path');
 const fs = require('fs');
+const cors = require('cors'); // [FLAG: 2025-05-27T18:05:00-04:00] Added CORS support
+
+// Import configuration
+const config = require('./config');
 
 // Initialize express app
 const app = express();
-const PORT = process.env.PORT || 3000;
+// [FLAG: 2025-05-27T18:10:00-04:00] Changed port to 3001 to avoid conflicts with Next.js
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(bodyParser.json());
 app.use(morgan('dev')); // Logging
+
+// [FLAG: 2025-05-27T18:05:00-04:00] Enable CORS for all routes
+app.use(cors({
+  origin: '*', // Allow all origins
+  methods: ['GET', 'POST'], // Allow only GET and POST methods
+  allowedHeaders: ['Content-Type', 'Authorization'] // Allow these headers
+}));
+
 // Serve static files directly from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -24,111 +38,112 @@ const logRequest = (req, payload, responseType) => {
   console.log(`Response Type: ${responseType}`);
 };
 
-// Routes
-app.get('/', (req, res) => {
-  res.send('Mock Generator API is running. Use /v2/generations/:id endpoint with POST requests.');
-});
-
 /**
  * Main endpoint handler for /v2/generations/:id
- * Handles different IDs and returns appropriate responses based on payload
+ * 
+ * [FLAG: 2025-05-27T17:55:00-04:00] Updated to use simplified configuration
+ * Handles different collection IDs and returns appropriate responses based on payload and configuration
  */
 app.post('/v2/generations/:id', (req, res) => {
   const { id } = req.params;
   const payload = req.body;
   
   // Log the incoming request
-  console.log(`[${new Date().toISOString()}] Received request for ID: ${id}`);
+  console.log(`[${new Date().toISOString()}] Received request for collection ID: ${id}`);
+  console.log(`Payload:`, payload);
   
-  // Handle different IDs
-  switch (id) {
-    case 'xxx-xxx-xxx':
-      handleXxxEndpoint(req, res, payload);
-      break;
-    case 'yyy-yyy-yyy':
-      handleYyyEndpoint(req, res, payload);
-      break;
-    default:
-      // Unknown ID
-      logRequest(req, payload, 'Unknown ID');
-      res.status(404).json({
-        error: 'Unknown generation ID',
-        timestamp: new Date().toISOString()
-      });
+  // Get the collection configuration for this ID
+  const collection = config.getCollectionById(id);
+  
+  if (!collection) {
+    // Unknown collection ID
+    logRequest(req, payload, 'Unknown collection ID');
+    res.status(404).json({
+      error: 'Unknown collection ID',
+      timestamp: new Date().toISOString()
+    });
+    return;
   }
+  
+  // Use payload directly since we're not mapping parameters anymore
+  const params = payload;
+  console.log(`Parameters:`, params);
+  
+  // Determine the appropriate response
+  const responseConfig = config.determineResponse(collection, params);
+  console.log(`Response config:`, responseConfig);
+  
+  if (!responseConfig) {
+    // No response configuration found
+    logRequest(req, payload, 'No response configuration');
+    res.status(500).json({
+      error: 'No response configuration found',
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+  
+  // Send the response based on the configuration
+  handleConfiguredResponse(req, res, collection, params, responseConfig);
 });
 
 /**
- * Handler for xxx-xxx-xxx endpoint
- * Has 2 response types:
- * 1. Default - Echo back the payload
- * 2. Special - Return image1.svg for a specific payload (to be defined)
+ * Handler for configured responses
+ * 
+ * [FLAG: 2025-05-27T17:50:00-04:00] New handler that uses the configuration file
+ * to determine the appropriate response
+ * 
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Object} collection - Collection configuration
+ * @param {Object} params - Request parameters (already mapped)
+ * @param {Object} responseConfig - Response configuration
  */
-function handleXxxEndpoint(req, res, payload) {
-  // For now, we'll use a simple check to determine which response to send
-  // This will be updated when specific payloads are defined
+function handleConfiguredResponse(req, res, collection, params, responseConfig) {
+  // Log the request
+  logRequest(req, params, `${collection.id}-${responseConfig.type}`);
   
-  // Check if payload has a specific marker (placeholder logic)
-  if (payload && payload.special === true) {
-    // Special response - return image1
-    logRequest(req, payload, 'xxx-special');
-    res.sendFile(path.join(__dirname, 'public/images/image1.svg'));
-  } else {
-    // Default response - echo back the payload
-    logRequest(req, payload, 'xxx-default');
-    res.status(200).json({
-      id: 'xxx-xxx-xxx',
-      echo: payload,
-      timestamp: new Date().toISOString()
-    });
-  }
-}
-
-/**
- * Handler for yyy-yyy-yyy endpoint
- * Has 7 response types:
- * 1. Default - Echo back the payload
- * 2-7. Special - Return different images based on payload
- */
-function handleYyyEndpoint(req, res, payload) {
-  // For now, we'll use a simple check to determine which response to send
-  // This will be updated when specific payloads are defined
-  
-  // Check if payload has a type field (placeholder logic)
-  if (payload && payload.type) {
-    const type = payload.type;
-    let imageNumber;
-    
-    switch (type) {
-      case 'type1':
-        imageNumber = 3;
-        break;
-      case 'type2':
-        imageNumber = 4;
-        break;
-      case 'type3':
-        imageNumber = 5;
-        break;
-      case 'type4':
-        imageNumber = 6;
-        break;
-      case 'type5':
-        imageNumber = 7;
-        break;
-      case 'type6':
-        imageNumber = 8;
-        break;
-      default:
-        imageNumber = 9; // Default special case
-    }
-    
-    // Return the appropriate image
-    logRequest(req, payload, `yyy-type${type}`);
-    res.sendFile(path.join(__dirname, `public/images/image${imageNumber}.svg`));
-  } else {
-    // Default response - echo back the payload with image2
-    logRequest(req, payload, 'yyy-default');
-    res.sendFile(path.join(__dirname, 'public/images/image2.svg'));
+  // Handle different response types
+  switch (responseConfig.type) {
+    case 'image':
+      // Send an image file
+      if (responseConfig.file) {
+        const filePath = path.join(__dirname, `public/images/${responseConfig.file}`);
+        if (fs.existsSync(filePath)) {
+          res.setHeader('Content-Type', responseConfig.contentType || 'image/svg+xml');
+          res.sendFile(filePath);
+        } else {
+          // File not found, send an error
+          res.status(500).json({
+            error: `Image file not found: ${responseConfig.file}`,
+            timestamp: new Date().toISOString()
+          });
+        }
+      } else {
+        // No file specified, send an error
+        res.status(500).json({
+          error: 'No image file specified in response configuration',
+          timestamp: new Date().toISOString()
+        });
+      }
+      break;
+      
+    case 'json':
+      // Send a JSON response
+      res.status(200).json({
+        ...responseConfig.data,
+        collectionId: collection.id,
+        params,
+        timestamp: new Date().toISOString()
+      });
+      break;
+      
+    default:
+      // Unknown response type, send an error
+      res.status(500).json({
+        error: `Unknown response type: ${responseConfig.type}`,
+        timestamp: new Date().toISOString()
+      });
   }
 }
 
@@ -136,6 +151,9 @@ function handleYyyEndpoint(req, res, payload) {
 app.listen(PORT, () => {
   console.log(`[${new Date().toISOString()}] Server running on port ${PORT}`);
   console.log('Available endpoints:');
-  console.log('- POST /v2/generations/xxx-xxx-xxx');
-  console.log('- POST /v2/generations/yyy-yyy-yyy');
+  
+  // List available collections from configuration
+  config.collections.forEach(collection => {
+    console.log(`- POST /v2/generations/${collection.id}`);
+  });
 });
