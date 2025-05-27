@@ -353,25 +353,73 @@ app.get('/jobs/:jobId/result', (req, res) => {
     return;
   }
   
-  // [FLAG: 2025-05-27T18:30:00-04:00] For image responses, we need to handle them specially
+  // [FLAG: 2025-05-27T18:38:00-04:00] For image responses, convert to base64 and return in JSON format
   if (job.responseConfig.type === 'image') {
     // Get the file path
     const filePath = path.join(__dirname, `public/images/${job.responseConfig.file}`);
     
     // Check if the file exists
     if (fs.existsSync(filePath)) {
-      // Log that we're sending the image file
-      console.log(`[${new Date().toISOString()}] Sending image file: ${job.responseConfig.file}`);
-      
-      // Set the content type and send the file
-      res.setHeader('Content-Type', job.responseConfig.contentType || 'image/svg+xml');
-      res.sendFile(filePath);
+      try {
+        // Log that we're reading the image file
+        console.log(`[${new Date().toISOString()}] Reading image file: ${job.responseConfig.file}`);
+        
+        // Read the file as binary data
+        const imageBuffer = fs.readFileSync(filePath);
+        
+        // Convert to base64
+        const base64Image = imageBuffer.toString('base64');
+        console.log(`[${new Date().toISOString()}] Converted image to base64, length: ${base64Image.length}`);
+        
+        // Get the content type
+        const contentType = job.responseConfig.contentType || 'image/png';
+        
+        // Return the job result with base64-encoded image
+        const timestamp = new Date().toISOString();
+        res.status(200).json({
+          data: {
+            id: job.id,
+            name: job.name,
+            description: job.description,
+            status: job.status,
+            progress: job.progress,
+            error_message: job.error_message,
+            created_at: job.created_at,
+            updated_at: timestamp,
+            started_at: job.started_at,
+            completed_at: job.completed_at,
+            job_type: job.job_type,
+            priority: job.priority,
+            data: {
+              outputs: [
+                {
+                  type: 'image',
+                  content: base64Image,
+                  mime_type: contentType,
+                  width: 512,  // Default values
+                  height: 512
+                }
+              ],
+              variables: job.data.variables,
+              collectionId: job.data.collectionId
+            }
+          },
+          error: null
+        });
+      } catch (error) {
+        // Error reading or processing the file
+        console.error(`[${new Date().toISOString()}] Error processing image file: ${error.message}`);
+        res.status(500).json({
+          data: null,
+          error: `Error processing image file: ${error.message}`
+        });
+      }
     } else {
       // File not found, send an error
       console.error(`[${new Date().toISOString()}] Image file not found: ${job.responseConfig.file}`);
       res.status(500).json({
-        error: `Image file not found: ${job.responseConfig.file}`,
-        timestamp: new Date().toISOString()
+        data: null,
+        error: `Image file not found: ${job.responseConfig.file}`
       });
     }
     return;
