@@ -353,18 +353,22 @@ app.get('/jobs/:jobId/result', (req, res) => {
     return;
   }
   
-  // For image responses, we need to handle them specially
+  // [FLAG: 2025-05-27T18:30:00-04:00] For image responses, we need to handle them specially
   if (job.responseConfig.type === 'image') {
     // Get the file path
     const filePath = path.join(__dirname, `public/images/${job.responseConfig.file}`);
     
     // Check if the file exists
     if (fs.existsSync(filePath)) {
+      // Log that we're sending the image file
+      console.log(`[${new Date().toISOString()}] Sending image file: ${job.responseConfig.file}`);
+      
       // Set the content type and send the file
       res.setHeader('Content-Type', job.responseConfig.contentType || 'image/svg+xml');
       res.sendFile(filePath);
     } else {
       // File not found, send an error
+      console.error(`[${new Date().toISOString()}] Image file not found: ${job.responseConfig.file}`);
       res.status(500).json({
         error: `Image file not found: ${job.responseConfig.file}`,
         timestamp: new Date().toISOString()
