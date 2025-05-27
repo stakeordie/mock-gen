@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Generator Test</title>
+    <!-- Generated: 2025-05-27T09:21:12-04:00 -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .endpoint-container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .response-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            min-height: 200px;
+            border-radius: 4px;
+        }
+        .image-display {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mock Generator API Test</h1>
+    <p>Use this page to test the mock generator endpoints and view the returned images.</p>
+    
+    <div class="container">
+        <div class="endpoint-container">
+            <h2>Test Endpoint</h2>
+            <div class="form-group">
+                <label for="endpoint-select">Select Endpoint:</label>
+                <select id="endpoint-select">
+                    <option value="xxx-xxx-xxx">xxx-xxx-xxx</option>
+                    <option value="yyy-yyy-yyy">yyy-yyy-yyy</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="payload-input">JSON Payload:</label>
+                <textarea id="payload-input" rows="5">{"test": "data"}</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>Quick Payloads:</label>
+                <button onclick="setPayload('default')">Default</button>
+                <button onclick="setPayload('special')">Special</button>
+                <button onclick="setPayload('type1')">Type 1</button>
+                <button onclick="setPayload('type2')">Type 2</button>
+                <button onclick="setPayload('type3')">Type 3</button>
+                <button onclick="setPayload('type4')">Type 4</button>
+                <button onclick="setPayload('type5')">Type 5</button>
+                <button onclick="setPayload('type6')">Type 6</button>
+            </div>
+            
+            <button onclick="sendRequest()">Send Request</button>
+            
+            <div class="response-container">
+                <h3>Response:</h3>
+                <div id="response-display"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Function to set predefined payloads
+        function setPayload(type) {
+            const payloadInput = document.getElementById('payload-input');
+            
+            switch(type) {
+                case 'default':
+                    payloadInput.value = '{"test": "data"}';
+                    break;
+                case 'special':
+                    payloadInput.value = '{"special": true}';
+                    break;
+                case 'type1':
+                    payloadInput.value = '{"type": "type1"}';
+                    break;
+                case 'type2':
+                    payloadInput.value = '{"type": "type2"}';
+                    break;
+                case 'type3':
+                    payloadInput.value = '{"type": "type3"}';
+                    break;
+                case 'type4':
+                    payloadInput.value = '{"type": "type4"}';
+                    break;
+                case 'type5':
+                    payloadInput.value = '{"type": "type5"}';
+                    break;
+                case 'type6':
+                    payloadInput.value = '{"type": "type6"}';
+                    break;
+            }
+        }
+        
+        // Function to send the request
+        function sendRequest() {
+            const endpoint = document.getElementById('endpoint-select').value;
+            const payload = document.getElementById('payload-input').value;
+            const responseDisplay = document.getElementById('response-display');
+            
+            // Clear previous response
+            responseDisplay.innerHTML = 'Loading...';
+            
+            try {
+                // Parse the payload to validate JSON
+                const payloadObj = JSON.parse(payload);
+                
+                // Make the request
+                fetch(`/v2/generations/${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: payload
+                })
+                .then(response => {
+                    // Check the content type
+                    const contentType = response.headers.get('content-type');
+                    
+                    if (contentType && contentType.includes('image/svg+xml')) {
+                        // Handle SVG response
+                        return response.text().then(svgText => {
+                            responseDisplay.innerHTML = `
+                                <p>Received SVG image:</p>
+                                <div class="image-display">${svgText}</div>
+                                <p>Raw SVG:</p>
+                                <pre>${escapeHtml(svgText)}</pre>
+                            `;
+                        });
+                    } else {
+                        // Handle JSON or other response
+                        return response.text().then(text => {
+                            try {
+                                // Try to parse as JSON
+                                const json = JSON.parse(text);
+                                responseDisplay.innerHTML = `
+                                    <p>Received JSON:</p>
+                                    <pre>${JSON.stringify(json, null, 2)}</pre>
+                                `;
+                            } catch (e) {
+                                // Not JSON, display as text
+                                responseDisplay.innerHTML = `
+                                    <p>Received text:</p>
+                                    <pre>${escapeHtml(text)}</pre>
+                                `;
+                            }
+                        });
+                    }
+                })
+                .catch(error => {
+                    responseDisplay.innerHTML = `<p>Error: ${error.message}</p>`;
+                });
+            } catch (e) {
+                responseDisplay.innerHTML = `<p>Invalid JSON payload: ${e.message}</p>`;
+            }
+        }
+        
+        // Helper function to escape HTML
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

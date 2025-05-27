@@ -14,7 +14,8 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(bodyParser.json());
 app.use(morgan('dev')); // Logging
-app.use('/static', express.static(path.join(__dirname, 'public')));
+// Serve static files directly from public directory
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Helper function to log requests
 const logRequest = (req, payload, responseType) => {
