@@ -107,17 +107,27 @@ app.post('/collections/:id/generations', (req, res) => {
   const jobId = generateUUID();
   
   // [FLAG: 2025-05-27T18:15:00-04:00] Store the job with initial status
+  const timestamp = new Date().toISOString();
   jobsStore.set(jobId, {
     id: jobId,
+    name: `Collection Generation: ${collection.id}`,
+    description: `Generation job for collection ${id}`,
     status: 'pending',
     progress: 0,
     error_message: null,
-    updated_at: new Date().toISOString(),
+    created_at: timestamp,
+    updated_at: timestamp,
+    started_at: null,
+    completed_at: null,
+    job_type: 'collection_generation',
+    priority: 1,
+    data: {
+      outputs: [],
+      variables: params,
+      collectionId: id
+    },
     // Additional fields for internal use
-    collectionId: id,
-    params,
-    responseConfig,
-    createdAt: new Date().toISOString()
+    responseConfig
   });
   
   // [FLAG: 2025-05-27T18:15:00-04:00] Schedule job progress updates and completion
@@ -125,9 +135,13 @@ app.post('/collections/:id/generations', (req, res) => {
   setTimeout(() => {
     const job = jobsStore.get(jobId);
     if (job) {
+      const timestamp = new Date().toISOString();
       job.status = 'processing';
       job.progress = 30;
-      job.updated_at = new Date().toISOString();
+      job.updated_at = timestamp;
+      if (!job.started_at) {
+        job.started_at = timestamp;
+      }
       jobsStore.set(jobId, job);
     }
   }, 1000);
@@ -147,9 +161,11 @@ app.post('/collections/:id/generations', (req, res) => {
   setTimeout(() => {
     const job = jobsStore.get(jobId);
     if (job) {
+      const timestamp = new Date().toISOString();
       job.status = 'completed';
       job.progress = 100;
-      job.updated_at = new Date().toISOString();
+      job.updated_at = timestamp;
+      job.completed_at = timestamp;
       jobsStore.set(jobId, job);
     }
   }, 3000); // 3 second delay
@@ -258,9 +274,55 @@ app.get('/jobs/:jobId/events', (req, res) => {
 });
 
 /**
+ * Job details endpoint handler for /jobs/:jobId
+ * 
+ * [FLAG: 2025-05-27T18:20:00-04:00] Added endpoint to get job details
+ * Returns the full details of a job
+ */
+app.get('/jobs/:jobId', (req, res) => {
+  const { jobId } = req.params;
+  
+  // Log the incoming request
+  console.log(`[${new Date().toISOString()}] Received request for job details: ${jobId}`);
+  
+  // Check if the job exists
+  if (!jobsStore.has(jobId)) {
+    res.status(404).json({
+      error: 'Job not found',
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+  
+  // Get the job
+  const job = jobsStore.get(jobId);
+  
+  // Return the job details in the format expected by the client
+  res.status(200).json({
+    data: {
+      id: job.id,
+      name: job.name,
+      description: job.description,
+      status: job.status,
+      progress: job.progress,
+      error_message: job.error_message,
+      created_at: job.created_at,
+      updated_at: job.updated_at,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      job_type: job.job_type,
+      priority: job.priority,
+      data: job.data
+    },
+    error: null
+  });
+});
+
+/**
  * Job result endpoint handler for /jobs/:jobId/result
  * 
  * [FLAG: 2025-05-27T18:20:00-04:00] Added endpoint to get job result
+ * [FLAG: 2025-05-27T18:15:00-04:00] Updated to match EmProps API format
  * Returns the result of a completed job
  */
 app.get('/jobs/:jobId/result', (req, res) => {
@@ -291,7 +353,27 @@ app.get('/jobs/:jobId/result', (req, res) => {
     return;
   }
   
-  // Send the response based on the stored configuration
+  // For image responses, we need to handle them specially
+  if (job.responseConfig.type === 'image') {
+    // Get the file path
+    const filePath = path.join(__dirname, `public/images/${job.responseConfig.file}`);
+    
+    // Check if the file exists
+    if (fs.existsSync(filePath)) {
+      // Set the content type and send the file
+      res.setHeader('Content-Type', job.responseConfig.contentType || 'image/svg+xml');
+      res.sendFile(filePath);
+    } else {
+      // File not found, send an error
+      res.status(500).json({
+        error: `Image file not found: ${job.responseConfig.file}`,
+        timestamp: new Date().toISOString()
+      });
+    }
+    return;
+  }
+  
+  // For other response types, use the configured handler
   handleConfiguredResponse(req, res, { id: job.collectionId }, job.params, job.responseConfig);
 });
 
@@ -305,5 +387,6 @@ app.listen(PORT, () => {
     console.log(`- POST /collections/${collection.id}/generations`);
   });
   console.log('- GET /jobs/:jobId/events');
+  console.log('- GET /jobs/:jobId');
   console.log('- GET /jobs/:jobId/result');
 });
