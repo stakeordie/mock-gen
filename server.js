@@ -12,6 +12,18 @@ const cors = require('cors'); // [FLAG: 2025-05-27T18:05:00-04:00] Added CORS su
 // Import configuration
 const config = require('./config');
 
+// [FLAG: 2025-05-27T18:15:00-04:00] In-memory storage for job status
+const jobsStore = new Map();
+
+// Helper function to generate a UUID
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 // Initialize express app
 const app = express();
 // [FLAG: 2025-05-27T18:10:00-04:00] Changed port to 3001 to avoid conflicts with Next.js
@@ -91,8 +103,64 @@ app.post('/collections/:id/generations', (req, res) => {
     return;
   }
   
-  // Send the response based on the configuration
-  handleConfiguredResponse(req, res, collection, params, responseConfig);
+  // [FLAG: 2025-05-27T18:15:00-04:00] Create a job ID and store the response config
+  const jobId = generateUUID();
+  
+  // [FLAG: 2025-05-27T18:15:00-04:00] Store the job with initial status
+  jobsStore.set(jobId, {
+    id: jobId,
+    status: 'pending',
+    progress: 0,
+    error_message: null,
+    updated_at: new Date().toISOString(),
+    // Additional fields for internal use
+    collectionId: id,
+    params,
+    responseConfig,
+    createdAt: new Date().toISOString()
+  });
+  
+  // [FLAG: 2025-05-27T18:15:00-04:00] Schedule job progress updates and completion
+  // First update at 1 second - 30% progress
+  setTimeout(() => {
+    const job = jobsStore.get(jobId);
+    if (job) {
+      job.status = 'processing';
+      job.progress = 30;
+      job.updated_at = new Date().toISOString();
+      jobsStore.set(jobId, job);
+    }
+  }, 1000);
+  
+  // Second update at 2 seconds - 70% progress
+  setTimeout(() => {
+    const job = jobsStore.get(jobId);
+    if (job) {
+      job.status = 'processing';
+      job.progress = 70;
+      job.updated_at = new Date().toISOString();
+      jobsStore.set(jobId, job);
+    }
+  }, 2000);
+  
+  // Final update at 3 seconds - completed (100% progress)
+  setTimeout(() => {
+    const job = jobsStore.get(jobId);
+    if (job) {
+      job.status = 'completed';
+      job.progress = 100;
+      job.updated_at = new Date().toISOString();
+      jobsStore.set(jobId, job);
+    }
+  }, 3000); // 3 second delay
+  
+  // Return the job ID immediately
+  res.status(202).json({
+    jobId,
+    status: 'pending',
+    message: 'Generation job started',
+    timestamp: new Date().toISOString()
+  });
 });
 
 /**
@@ -155,6 +223,78 @@ function handleConfiguredResponse(req, res, collection, params, responseConfig) 
   }
 }
 
+/**
+ * Job status endpoint handler for /jobs/:jobId/events
+ * 
+ * [FLAG: 2025-05-27T18:20:00-04:00] Added endpoint to check job status
+ * [FLAG: 2025-05-27T18:15:00-04:00] Updated to match EmProps API format
+ */
+app.get('/jobs/:jobId/events', (req, res) => {
+  const { jobId } = req.params;
+  
+  // Log the incoming request
+  console.log(`[${new Date().toISOString()}] Received request for job status: ${jobId}`);
+  
+  // Check if the job exists
+  if (!jobsStore.has(jobId)) {
+    res.status(404).json({
+      error: 'Job not found',
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+  
+  // Get the job status
+  const job = jobsStore.get(jobId);
+  
+  // Return the job status in the format expected by the client
+  res.status(200).json({
+    id: job.id,
+    status: job.status,
+    progress: job.progress,
+    error_message: job.error_message,
+    updated_at: job.updated_at
+  });
+});
+
+/**
+ * Job result endpoint handler for /jobs/:jobId/result
+ * 
+ * [FLAG: 2025-05-27T18:20:00-04:00] Added endpoint to get job result
+ * Returns the result of a completed job
+ */
+app.get('/jobs/:jobId/result', (req, res) => {
+  const { jobId } = req.params;
+  
+  // Log the incoming request
+  console.log(`[${new Date().toISOString()}] Received request for job result: ${jobId}`);
+  
+  // Check if the job exists
+  if (!jobsStore.has(jobId)) {
+    res.status(404).json({
+      error: 'Job not found',
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+  
+  // Get the job
+  const job = jobsStore.get(jobId);
+  
+  // Check if the job is completed
+  if (job.status !== 'completed') {
+    res.status(400).json({
+      error: 'Job not completed yet',
+      status: job.status,
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+  
+  // Send the response based on the stored configuration
+  handleConfiguredResponse(req, res, { id: job.collectionId }, job.params, job.responseConfig);
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`[${new Date().toISOString()}] Server running on port ${PORT}`);
@@ -164,4 +304,6 @@ app.listen(PORT, () => {
   config.collections.forEach(collection => {
     console.log(`- POST /collections/${collection.id}/generations`);
   });
+  console.log('- GET /jobs/:jobId/events');
+  console.log('- GET /jobs/:jobId/result');
 });
